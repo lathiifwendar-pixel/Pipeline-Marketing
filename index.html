@@ -737,7 +737,9 @@ async function saveLead(f){
     channel:old.channel||'Lead baru',lastDate:old.lastDate||f.enteredAt.value,ts:old.ts||Date.now(),by:old.by||S.me.name
   });
   if(!rec.company){toast('Nama perusahaan wajib diisi.');return}
-  try{await putDoc('leads',id,rec);closeSheet();toast('Lead tersimpan.')}catch(e){writeFail(e)}
+  var go=putDoc('leads',id,rec);
+  if(P.mode==='gas'){closeSheet();toast('Menyimpan…');go.then(function(){toast('Lead tersimpan.')},writeFail);return}
+  try{await go;closeSheet();toast('Lead tersimpan.')}catch(e){writeFail(e)}
 }
 async function saveAct(f){
   var id=f.id.value||newId('a');var isNew=!f.id.value;
@@ -745,15 +747,16 @@ async function saveAct(f){
   if(!lead){toast('Pilih perusahaan dulu.');return}
   var old=S.acts.filter(function(x){return x.id===id})[0]||{};
   var rec=Object.assign({},old,{date:f.date.value,company:lead.company,leadId:lead.id,type:f.type.value,produk:lead.produk,stage:f.stage.value,note:f.note.value.trim(),ts:old.ts||Date.now(),by:old.by||S.me.name});
-  try{
+  var work=(async function(){
     await putDoc('activities',id,rec);
     if(isNew){
       var upd=Object.assign({},lead,{stage:rec.stage,channel:rec.type});
       if(!lead.lastDate||rec.date>=lead.lastDate)upd.lastDate=rec.date;
       await putDoc('leads',lead.id,upd);
     }
-    closeSheet();toast('Aktivitas tersimpan.');
-  }catch(e){writeFail(e)}
+  })();
+  if(P.mode==='gas'){closeSheet();toast('Menyimpan…');work.then(function(){toast('Aktivitas tersimpan.')},writeFail);return}
+  try{await work;closeSheet();toast('Aktivitas tersimpan.')}catch(e){writeFail(e)}
 }
 var askTimer=null;
 async function askDelete(id){
@@ -930,10 +933,12 @@ document.addEventListener('change',function(e){
 });
 document.addEventListener('submit',function(e){
   e.preventDefault();
-  if(e.target.id==='lead-form')saveLead(e.target);
-  else if(e.target.id==='act-form')saveAct(e.target);
-  else if(e.target.id==='me-form')saveMe(e.target);
-  else if(e.target.id==='login-form')doLogin(e.target);
+  /* getAttribute: pada <form> yang punya input bernama "id", properti .id mengembalikan input, bukan teks */
+  var fid=e.target.getAttribute('id');
+  if(fid==='lead-form')saveLead(e.target);
+  else if(fid==='act-form')saveAct(e.target);
+  else if(fid==='me-form')saveMe(e.target);
+  else if(fid==='login-form')doLogin(e.target);
 });
 window.addEventListener('hashchange',onHash);
 
