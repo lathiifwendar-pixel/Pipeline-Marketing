@@ -262,8 +262,12 @@ function isoWeek(d){var t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDa
 function dShort(s){if(!s)return '';var d=parse(s);return d.getDate()+' '+MONTHS[d.getMonth()]}
 function dLong(s){var d=parse(s);return DAYS_L[d.getDay()]+', '+d.getDate()+' '+MONTHS_L[d.getMonth()]}
 function nfmt(n){n=Math.round(n*10)/10;return String(n).replace('.',',')}
-function rpChip(v){v=+v||0;return v>=1000?'Rp'+nfmt(v/1000)+'M':'Rp'+nfmt(v)+'jt'}
-function rpStat(v){v=+v||0;return v>=1000?'Rp'+nfmt(v/1000)+' M':'Rp'+nfmt(v)+' jt'}
+function nrp(v){v=Math.round(+v||0);return 'Rp '+String(v).replace(/\B(?=(\d{3})+(?!\d))/g,'.')}
+function rpChip(v){return nrp(v)}
+function rpStat(v){return nrp(v)}
+function digits(t){return String(t||'').replace(/\D/g,'')}
+function dots(t){var d=digits(t).replace(/^0+(?=\d)/,'');return d.replace(/\B(?=(\d{3})+(?!\d))/g,'.')}
+function fixLeads(a){/* data lama disimpan dalam juta: ubah ke rupiah penuh */return (a||[]).map(function(l){var v=+l.value||0;return v>0&&v<100000?Object.assign({},l,{value:Math.round(v*1000000)}):l})}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function key(s){return String(s||'').trim().toLowerCase()}
 function newId(p){return p+Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
@@ -391,10 +395,10 @@ function sortActs(list){return list.slice().sort(function(x,y){return y.date.loc
 
 /* ---------- data layer ---------- */
 function persistLocal(){try{localStorage.setItem(LS_KEY,JSON.stringify({leads:S.leads,acts:S.acts}))}catch(e){}}
-function loadLocal(){try{var j=JSON.parse(localStorage.getItem(LS_KEY)||'null');if(j){S.leads=j.leads||[];S.acts=j.acts||[]}}catch(e){}}
+function loadLocal(){try{var j=JSON.parse(localStorage.getItem(LS_KEY)||'null');if(j){S.leads=fixLeads(j.leads||[]);S.acts=j.acts||[]}}catch(e){}}
 function strip(rec){var o={};Object.keys(rec).forEach(function(k){if(k!=='id')o[k]=rec[k]});return o}
 var H={
-  data:function(l,a){S.leads=l;S.acts=a;S.ready=true;S.slow=false;S.err='';S.auth='ok';render()},
+  data:function(l,a){l=fixLeads(l);S.leads=l;S.acts=a;S.ready=true;S.slow=false;S.err='';S.auth='ok';render()},
   me:function(m){S.me=Object.assign({},S.me,m);render()},
   error:function(code){S.err=code||'unavailable';S.ready=true;render()},
   slow:function(){if(!S.ready){S.slow=true;render()}},
@@ -705,7 +709,7 @@ function leadForm(l){
    +'<label class="fld"><span>Sektor</span><input id="f-sector" name="sector" value="'+esc(l.sector||'')+'"></label>'
    +'<div class="two"><label class="fld"><span>PIC</span><input id="f-pic" name="pic" value="'+esc(l.pic||'')+'"></label><label class="fld"><span>Jabatan</span><input id="f-role" name="role" value="'+esc(l.role||'')+'"></label></div>'
    +'<label class="fld"><span>WhatsApp</span><input id="f-wa" name="wa" inputmode="tel" placeholder="+62 812-0000-0000" value="'+esc(l.wa||'')+'"></label>'
-   +'<div class="two"><label class="fld"><span>Potensi unit</span><input id="f-units" name="units" inputmode="numeric" value="'+esc(l.units||'')+'"></label><label class="fld"><span>Nilai (Rp juta)</span><input id="f-value" name="value" inputmode="decimal" value="'+esc(l.value||'')+'"></label></div>'
+   +'<div class="two"><label class="fld"><span>Potensi unit</span><input id="f-units" name="units" inputmode="numeric" value="'+esc(l.units||'')+'"></label><label class="fld"><span>Nilai (Rp)</span><input id="f-value" name="value" inputmode="numeric" autocomplete="off" placeholder="mis. 105.000.000" value="'+esc(l.value?dots(l.value):'')+'"></label></div>'
    +'<div class="two"><label class="fld"><span>Sumber</span><select id="f-source" name="source">'+opts(SOURCES,l.source||'Referensi')+'</select></label><label class="fld"><span>Tanggal masuk</span><input id="f-entered" name="enteredAt" type="date" required value="'+esc(l.enteredAt||today)+'"></label></div>'
    +'<div class="sheet-actions"><button type="submit" class="btn primary grow">Simpan</button><button type="button" class="btn" data-act="close">Batal</button>'+(isNew?'':'<button type="button" class="btn danger" data-act="del-lead" data-id="'+esc(l.id)+'" id="del-lead">Hapus lead</button>')+'</div></form>';
 }
@@ -732,7 +736,7 @@ async function saveLead(f){
   var rec=Object.assign({},old,{
     company:f.company.value.trim(),produk:produk,kompetitor:produk==='Kompetitor'?f.kompetitor.value.trim():'',
     sector:f.sector.value.trim(),pic:f.pic.value.trim(),role:f.role.value.trim(),wa:f.wa.value.trim(),
-    units:parseFloat(String(f.units.value).replace(',','.'))||0,value:parseFloat(String(f.value.value).replace(',','.'))||0,
+    units:parseFloat(String(f.units.value).replace(',','.'))||0,value:parseInt(digits(f.value.value),10)||0,
     source:f.source.value,enteredAt:f.enteredAt.value,stage:f.stage.value,
     channel:old.channel||'Lead baru',lastDate:old.lastDate||f.enteredAt.value,ts:old.ts||Date.now(),by:old.by||S.me.name
   });
@@ -790,7 +794,7 @@ async function makeReportSheet(){
   var sheets=[
     {name:'Ringkasan',rows:[[m.title],[m.company+' | '+m.sub],['Segmen',m.seg],['Disusun oleh',m.by],[],['Indikator','Nilai']].concat(m.tiles.map(function(t){return [t[0],t[2]]})).concat([[],[m.narrative]])},
     {name:'Aktivitas',rows:[['Tanggal','Perusahaan','Jenis','Produk','Tahap','Catatan']].concat(m.acts.map(function(a){return [a.date,a.company,a.type,a.produk,a.stage||'',a.note||'']}))},
-    {name:'Pipeline',rows:[['Tahap','Jumlah lead','Nilai (Rp juta)']].concat(m.stageRows.map(function(r){return [r.name,r.jumlah,r.nilai]}))}
+    {name:'Pipeline',rows:[['Tahap','Jumlah lead','Nilai (Rp)']].concat(m.stageRows.map(function(r){return [r.name,r.jumlah,r.nilai]}))}
   ];
   try{
     var r=await P.reportSheet('EasyGo Pipeline - '+m.sub,sheets);
@@ -825,17 +829,17 @@ async function exportXlsx(){
   toast('Menyiapkan Excel…');
   try{await loadScript(XLSX_URL)}catch(e){toast('Pustaka Excel gagal dimuat. Periksa koneksi.');return}
   var m=reportModel();var X=window.XLSX;var wb=X.utils.book_new();
-  var ws1=X.utils.aoa_to_sheet([[m.title],[m.company+' | '+m.sub],['Segmen',m.seg],['Disusun oleh',m.by],[],['Indikator','Nilai']].concat(m.tiles.map(function(t){return [t[0]==='Nilai penawaran & negosiasi'?'Nilai penawaran & negosiasi (Rp juta)':t[0],t[2]]})).concat([[],[m.narrative]]).concat(m.segRows.length?[[],['Segmen','Aktivitas','Perusahaan','Lead baru','Nilai (Rp juta)']].concat(m.segRows.map(function(r){return [r.name,r.aktivitas,r.perusahaan,r.lb,r.nilai]})):[]));
+  var ws1=X.utils.aoa_to_sheet([[m.title],[m.company+' | '+m.sub],['Segmen',m.seg],['Disusun oleh',m.by],[],['Indikator','Nilai']].concat(m.tiles.map(function(t){return [t[0]==='Nilai penawaran & negosiasi'?'Nilai penawaran & negosiasi (Rp)':t[0],t[2]]})).concat([[],[m.narrative]]).concat(m.segRows.length?[[],['Segmen','Aktivitas','Perusahaan','Lead baru','Nilai (Rp)']].concat(m.segRows.map(function(r){return [r.name,r.aktivitas,r.perusahaan,r.lb,r.nilai]})):[]));
   ws1['!cols']=[{wch:38},{wch:18},{wch:14},{wch:12},{wch:16}];
   X.utils.book_append_sheet(wb,ws1,'Ringkasan');
   var ws2=X.utils.aoa_to_sheet([['Tanggal','Perusahaan','Jenis','Produk','Tahap','Catatan']].concat(m.acts.map(function(a){return [a.date,a.company,a.type,a.produk,a.stage||'',a.note||'']})));
   ws2['!cols']=[{wch:12},{wch:32},{wch:12},{wch:16},{wch:18},{wch:48}];
   X.utils.book_append_sheet(wb,ws2,'Aktivitas');
   var ll=S.leads.filter(function(l){return segOk(l.produk)}).sort(function(a,b){return (b.enteredAt||'').localeCompare(a.enteredAt||'')});
-  var ws3=X.utils.aoa_to_sheet([['Perusahaan','Produk','Kompetitor','Sektor','PIC','Jabatan','WhatsApp','Potensi unit','Nilai (Rp juta)','Sumber','Tanggal masuk','Tahap','Kontak terakhir']].concat(ll.map(function(l){return [l.company,l.produk,l.kompetitor||'',l.sector||'',l.pic||'',l.role||'',l.wa||'',+l.units||0,+l.value||0,l.source||'',l.enteredAt||'',l.stage||'',l.lastDate||'']})));
+  var ws3=X.utils.aoa_to_sheet([['Perusahaan','Produk','Kompetitor','Sektor','PIC','Jabatan','WhatsApp','Potensi unit','Nilai (Rp)','Sumber','Tanggal masuk','Tahap','Kontak terakhir']].concat(ll.map(function(l){return [l.company,l.produk,l.kompetitor||'',l.sector||'',l.pic||'',l.role||'',l.wa||'',+l.units||0,+l.value||0,l.source||'',l.enteredAt||'',l.stage||'',l.lastDate||'']})));
   ws3['!cols']=[{wch:32},{wch:16},{wch:18},{wch:22},{wch:16},{wch:22},{wch:18},{wch:12},{wch:14},{wch:16},{wch:14},{wch:18},{wch:14}];
   X.utils.book_append_sheet(wb,ws3,'Leads');
-  var ws4=X.utils.aoa_to_sheet([['Tahap','Jumlah lead','Nilai (Rp juta)']].concat(m.stageRows.map(function(r){return [r.name,r.jumlah,r.nilai]})));
+  var ws4=X.utils.aoa_to_sheet([['Tahap','Jumlah lead','Nilai (Rp)']].concat(m.stageRows.map(function(r){return [r.name,r.jumlah,r.nilai]})));
   ws4['!cols']=[{wch:22},{wch:14},{wch:16}];
   X.utils.book_append_sheet(wb,ws4,'Pipeline');
   var out=X.write(wb,{bookType:'xlsx',type:'array'});
@@ -924,6 +928,7 @@ document.addEventListener('keydown',function(e){
   if((e.key==='Enter'||e.key===' ')&&e.target.classList&&e.target.classList.contains('arow')){e.preventDefault();e.target.click()}
 });
 document.addEventListener('input',function(e){
+  if(e.target.id==='f-value'){var el=e.target,v=dots(el.value);if(el.value!==v)el.value=v}
   if(e.target.id==='q'){S.q=e.target.value;var el=$('lead-list');if(el)el.innerHTML=leadListHtml()}
 });
 document.addEventListener('change',function(e){
